@@ -1,4 +1,5 @@
 require "rexml/document"
+require "zip"
 
 module LicenseFinder
   class Nuget < PackageManager
@@ -16,7 +17,8 @@ module LicenseFinder
 
     def current_packages
       dependencies.reduce({}) do |memo, dep|
-        memo[dep.name] ||= NugetPackage.new(dep.name, dep.version)
+        xml = NugetExtractor.new(project_path, dep).xml
+        memo[dep.name] ||= NugetPackage.from_package_xml(xml)
         memo[dep.name].groups << dep.assembly if !memo[dep.name].groups.include? dep.assembly
         memo
       end.values
@@ -44,6 +46,25 @@ module LicenseFinder
     end
 
     class Dependency < Struct.new(:name, :version, :assembly)
+    end
+
+    class NugetExtractor
+      attr_reader :project_path, :dep
+      def initialize(project_path, dep)
+        @project_path = project_path
+        @dep = dep
+      end
+
+      def package_path
+        datstrang = "#{dep.name}.#{dep.version}"
+        project_path.join('packages', datstrang, "#{datstrang}.nupkg")
+      end
+
+      def xml
+        ::Zip::File.open(package_path) do |zip_file|
+          zip_file.read("#{dep.name}.nuspec")
+        end
+      end
     end
   end
 end
